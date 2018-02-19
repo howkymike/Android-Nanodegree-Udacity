@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">PopMovies</string>
+    <string name="sort">Sort</string>
+    <string name="sortBy">Sort By</string>
+    <string name="error_message">Please check your internet connection and try again</string>
+    <string name="title_activity_display_message">Details</string>
+    <string name="no_internet_connection">No Internet Connection!</string>
+    <string name="no_internet_message">Please check your internet connection and run the app again!</string>
+    <string name="no_internet_button">Got it!</string>
+    <string name="contentDescriptionImagePoster">This should be a poster image</string>
+    <string name="contentDescriptionImageBackdrop">This should be a backdrop image</string>
+    <string name="textViewSampleText">TextView</string>
+
+</resources>
