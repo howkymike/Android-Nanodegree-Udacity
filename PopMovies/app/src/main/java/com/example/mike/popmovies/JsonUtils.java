@@ -1,7 +1,5 @@
 package com.example.mike.popmovies;
 
-import com.example.mike.popmovies.Networking.NetworkUtils;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;

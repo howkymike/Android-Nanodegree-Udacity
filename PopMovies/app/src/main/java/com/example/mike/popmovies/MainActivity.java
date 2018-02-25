@@ -1,11 +1,10 @@
 package com.example.mike.popmovies;
 
-import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.os.AsyncTask;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
@@ -21,6 +20,8 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import com.example.mike.popmovies.Networking.NetworkUtils;
+import com.example.mike.popmovies.data.MovieDbContract;
+import com.example.mike.popmovies.data.MovieDbHelper;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -48,24 +49,19 @@ public class MainActivity extends AppCompatActivity {
     private ArrayList<MovieObject> movies;
     private int mPage;
     private String mTypeOfRecord;
+    private SQLiteDatabase mDb;
+    public boolean isOnline;
+
+    private static final String TAG = MainActivity.class.getSimpleName();
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
         ButterKnife.bind(this);
 
-        // doesn't work
-/*        if (savedInstanceState != null) {
-            mTypeOfRecord = savedInstanceState.getString(ON_SAVED_TYPE_RECORD_KEY);
-            Log.v("myTAG notNull: ", savedInstanceState.getString(ON_SAVED_TYPE_RECORD_KEY));
-        } else {
-            mTypeOfRecord = "popular";
-            Log.v("myTAG Null: ", mTypeOfRecord);
-        }*/
-
+        // checks if Online
         SharedPreferences prefs = getSharedPreferences(MY_PREFS, MODE_PRIVATE);
         String restoredTypeOfRecord = prefs.getString(ON_SAVED_TYPE_RECORD_KEY, null);
         if (restoredTypeOfRecord != null) {
@@ -74,16 +70,27 @@ public class MainActivity extends AppCompatActivity {
             mTypeOfRecord = "popular";
         }
 
-
-        boolean isOnline = isOnline();
+        isOnline = NetworkUtils.isOnline(this);
         if (!isOnline) {
+
+            final AlertDialog.Builder localOnlyDialogBuilder = new AlertDialog.Builder(this);
+            localOnlyDialogBuilder.setTitle(R.string.no_internet_connection)
+                    .setMessage(R.string.favourites_only)
+                    .setPositiveButton(R.string.ok, new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            mTypeOfRecord = "favourites";
+                        }
+                    });
+
             final AlertDialog.Builder alterDialogBuilder = new AlertDialog.Builder(this);
             alterDialogBuilder.setTitle(R.string.no_internet_connection)
                     .setMessage(R.string.no_internet_message)
                     .setPositiveButton(R.string.no_internet_button, new DialogInterface.OnClickListener() {
                                 @Override
                                 public void onClick(DialogInterface dialog, int which) {
-                                    finish();
+                                    //finish();
+                                    localOnlyDialogBuilder.show();
                                 }
                             }
                     );
@@ -91,51 +98,59 @@ public class MainActivity extends AppCompatActivity {
             alterDialogBuilder.show();
         }
 
-        movies = new ArrayList<MovieObject>();
-        mPage = 1;
 
-        GridLayoutManager gridLayoutManager;
-        if (this.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT){
-            gridLayoutManager = new GridLayoutManager(this, numberOfColumnsPortrait);
-        } else {
-            gridLayoutManager = new GridLayoutManager(this, numberOfColumnsLandscape);
-        }
-        mRecyclerView.setLayoutManager(gridLayoutManager);
+            movies = new ArrayList<MovieObject>();
+            mPage = 1;
 
-        loadMoviesAdapter = new LoadMoviesAdapter(this);
-        mRecyclerView.setAdapter(loadMoviesAdapter);
-
-        mScrollListener = new EndlessRecyclerViewScrollListener(gridLayoutManager) {
-
-            @Override
-            public void onLoadMore(int page, int totalItemsCount, RecyclerView view) {
-                mPage++;
-                Log.v(MainActivity.class.getSimpleName(), "onLoadMore:  " + mPage + " " + mTypeOfRecord);
-                new TheMovieRequestTask().execute();
+            GridLayoutManager gridLayoutManager;
+            if (this.getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
+                gridLayoutManager = new GridLayoutManager(this, numberOfColumnsPortrait);
+            } else {
+                gridLayoutManager = new GridLayoutManager(this, numberOfColumnsLandscape);
             }
-        };
-        mRecyclerView.addOnScrollListener(mScrollListener);
+            mRecyclerView.setLayoutManager(gridLayoutManager);
 
-        // is it really necessary?
-        mRecyclerView.setHasFixedSize(true);
+            loadMoviesAdapter = new LoadMoviesAdapter(this);
+            mRecyclerView.setAdapter(loadMoviesAdapter);
 
-        mRecyclerView.setVisibility(View.INVISIBLE);
-        mLoadingIndicator.setVisibility(View.VISIBLE);
-        new TheMovieRequestTask().execute();
+            mScrollListener = new EndlessRecyclerViewScrollListener(gridLayoutManager) {
+
+                @Override
+                public void onLoadMore(int page, int totalItemsCount, RecyclerView view) {
+                    mPage++;
+                    Log.v(MainActivity.class.getSimpleName(), "onLoadMore:  " + mPage + " " + mTypeOfRecord);
+
+                    if (isOnline && !mTypeOfRecord.equals("favourites")) {
+                        new TheMovieRequestTask().execute();
+                    } else {
+                        // do sth with cursor
+                    }
+                }
+            };
+            mRecyclerView.addOnScrollListener(mScrollListener);
+
+            // is it really necessary?
+            mRecyclerView.setHasFixedSize(true);
+
+            mRecyclerView.setVisibility(View.INVISIBLE);
+            mLoadingIndicator.setVisibility(View.VISIBLE);
+
+
+        if (isOnline && !mTypeOfRecord.equals("favourites")) {
+            new TheMovieRequestTask().execute();
+        }
+        else {
+            Cursor cursor = getMainDataFromDb();
+            loadMoviesAdapter.setMovieData(cursor);
+            mRecyclerView.setVisibility(View.VISIBLE);
+            mLoadingIndicator.setVisibility(View.INVISIBLE);
+        }
     }
 
 
 
 
     public class TheMovieRequestTask extends AsyncTask<Void, Void, JSONObject> {
-        @Override
-        protected void onPreExecute() {
-           // mRecyclerView.setVisibility(View.INVISIBLE);
-          //  mLoadingIndicator.setVisibility(View.VISIBLE);
-            super.onPreExecute();
-
-
-        }
 
 
         @Override
@@ -168,11 +183,10 @@ public class MainActivity extends AppCompatActivity {
                 movies.addAll(moreMovies);
 
                 loadMoviesAdapter.setMovieData(movies);
-                loadMoviesAdapter.notifyDataSetChanged();
                 mLoadingIndicator.setVisibility(View.INVISIBLE);
                 mRecyclerView.setVisibility(View.VISIBLE);
             } else {
-                showErrorMessage();
+                noData();
             }
 
         }
@@ -180,7 +194,7 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-    private void showErrorMessage() {
+    private void noData() {
         mRecyclerView.setVisibility(View.INVISIBLE);
         mErrorMessageDisplay.setVisibility(View.VISIBLE);
     }
@@ -202,26 +216,38 @@ public class MainActivity extends AppCompatActivity {
                         .setItems(R.array.sort_options, new DialogInterface.OnClickListener() {
                             @Override
                             public void onClick(DialogInterface dialog, int which) {
+
+                                movies.clear();
+                                mPage = 1;
+                                mScrollListener.resetState();
                                 switch (which) {
                                     case 0:
                                         mTypeOfRecord = "popular";
-                                                break;
+                                        break;
                                     case 1:
                                         mTypeOfRecord = "top_rated";
-                                                break;
+                                        break;
                                     case 2:
                                         mTypeOfRecord = "upcoming";
+                                        break;
+                                    case 3:
+                                        mTypeOfRecord = "favourites";
+                                        Cursor cursor = getMainDataFromDb();
+                                        loadMoviesAdapter.setMovieData(cursor);
                                         break;
                                     default:
                                         mTypeOfRecord = "popular";
 
                                 }
-                                movies.clear();
-                                mPage = 1;
-                                mScrollListener.resetState();
-                                mRecyclerView.setVisibility(View.INVISIBLE);
-                                mLoadingIndicator.setVisibility(View.VISIBLE);
-                                new TheMovieRequestTask().execute();
+
+                                if (!mTypeOfRecord.equals("favourites")) {
+                                    mRecyclerView.setVisibility(View.INVISIBLE);
+                                    mLoadingIndicator.setVisibility(View.VISIBLE);
+                                    new TheMovieRequestTask().execute();
+                                } else {
+                                    mRecyclerView.setVisibility(View.VISIBLE);
+                                    mLoadingIndicator.setVisibility(View.INVISIBLE);
+                                }
                             }
                         });
                 builder.show();
@@ -235,13 +261,28 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    private Cursor getMainDataFromDb() {
+        MovieDbHelper dbHelper = new MovieDbHelper(this);
+        // this should be in AsyncTask
+        mDb = dbHelper.getReadableDatabase();
 
-    private boolean isOnline() {
-        ConnectivityManager cm =
-                (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo netInfo = cm.getActiveNetworkInfo();
-        return netInfo != null && netInfo.isConnectedOrConnecting();
+        Cursor cursor = mDb.query(
+                MovieDbContract.MovieDbEntry.TABLE_NAME,
+                null,
+                null,
+                null,
+                null,
+                null,
+                MovieDbContract.MovieDbEntry._ID + " ASC");
+
+        if (cursor.getCount() == 0) {
+            noData();
+        }
+        return cursor;
     }
+
+
+
 
     @Override
     protected void onSaveInstanceState(Bundle outState) {
@@ -249,6 +290,5 @@ public class MainActivity extends AppCompatActivity {
         editor.putString(ON_SAVED_TYPE_RECORD_KEY, mTypeOfRecord);
         editor.apply();
         super.onSaveInstanceState(outState);
-    //    outState.putString(ON_SAVED_TYPE_RECORD_KEY, mTypeOfRecord);
     }
 }

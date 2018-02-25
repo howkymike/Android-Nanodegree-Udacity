@@ -22,6 +22,7 @@ public class MovieObject implements Serializable{
     private boolean ifAdult;
     private String overview;
     private String release_date;
+    private boolean favourite;
 
 
     public MovieObject(int vote_count, int ID, boolean ifVideo, double vote_average, String title, double popularity, String poster_path,
@@ -41,6 +42,7 @@ public class MovieObject implements Serializable{
         this.ifAdult = ifAdult;
         this.overview = overview;
         this.release_date = release_date;
+        this.favourite = false;
     }
 
     public int getVote_count() {
@@ -153,5 +155,13 @@ public class MovieObject implements Serializable{
 
     public void setRelease_date(String release_date) {
         this.release_date = release_date;
+    }
+
+    public boolean getFavourite() {
+        return favourite;
+    }
+
+    public void setFavourite(boolean favourite) {
+        this.favourite = favourite;
     }
 }
